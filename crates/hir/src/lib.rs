@@ -2437,7 +2437,9 @@ impl TypeParam {
         let subst = TyBuilder::placeholder_subst(db, self.id.parent());
         let ty = ty.substitute(Interner, &subst_prefix(&subst, local_idx));
         match ty.data(Interner) {
-            GenericArgData::Ty(x) => Some(Type::new_with_resolver_inner(db, &resolver, x.clone())),
+            GenericArgData::Ty(x) if x != &TyKind::Error.intern(Interner) => {
+                Some(Type::new_with_resolver_inner(db, &resolver, x.clone()))
+            }
             _ => None,
         }
     }

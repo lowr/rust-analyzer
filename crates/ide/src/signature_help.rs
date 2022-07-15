@@ -316,6 +316,12 @@ fn signature_help_for_generics(
 
         buf.clear();
         format_to!(buf, "{}", param.display(db));
+        // FIXME: show default value for const parameter when supported
+        if let hir::GenericParam::TypeParam(ty) = param {
+            if let Some(default_param) = ty.default(db) {
+                format_to!(buf, " = {}", default_param.display(db));
+            }
+        }
         res.push_generic_param(&buf);
     }
     if let hir::GenericDef::Trait(tr) = generics_def {
@@ -1071,6 +1077,43 @@ fn f() {
             expect![[r#"
                 fn f<G: Tr<()>, H>
                      ---------  ^
+            "#]],
+        );
+    }
+
+    #[test]
+    fn test_generics_default_parameters() {
+        check(
+            r#"
+enum ControlFlow<B, C = ()> {
+    Continue(C),
+    Break(B),
+}
+
+fn f() {
+    let v: ControlFlow<$0
+}
+            "#,
+            expect![[r#"
+                enum ControlFlow<B, C = ()>
+                                 ^  ------
+            "#]],
+        );
+
+        check(
+            r#"
+enum ControlFlow<B, C = ()> {
+    Continue(C),
+    Break(B),
+}
+
+fn f() {
+    let v: ControlFlow<i32,$0
+}
+            "#,
+            expect![[r#"
+                enum ControlFlow<B, C = ()>
+                                 -  ^^^^^^
             "#]],
         );
     }
