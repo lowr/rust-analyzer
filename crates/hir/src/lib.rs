@@ -305,9 +305,9 @@ impl ModuleDef {
     }
 
     pub fn canonical_path(&self, db: &dyn HirDatabase) -> Option<String> {
-        let mut segments = vec![self.name(db)?];
+        let mut segments = vec![self.name(db)?.escaped().to_smol_str()];
         for m in self.module(db)?.path_to_root(db) {
-            segments.extend(m.name(db))
+            segments.extend(m.name(db).map(|it| it.escaped().to_smol_str()));
         }
         segments.reverse();
         Some(segments.into_iter().join("::"))

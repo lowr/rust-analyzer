@@ -707,7 +707,11 @@ impl HirDisplay for Ty {
                 match param_data {
                     TypeOrConstParamData::TypeParamData(p) => match p.provenance {
                         TypeParamProvenance::TypeParamList | TypeParamProvenance::TraitSelf => {
-                            write!(f, "{}", p.name.clone().unwrap_or_else(Name::missing))?
+                            if let Some(name) = &p.name {
+                                write!(f, "{}", name.escaped())?;
+                            } else {
+                                write!(f, "{}", Name::missing())?;
+                            }
                         }
                         TypeParamProvenance::ArgumentImplTrait => {
                             let substs = generics.placeholder_subst(f.db);
