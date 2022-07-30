@@ -728,14 +728,14 @@ fn should_have_runnable_2() {}
 let z = 55;
 ```
 */
-fn should_have_no_runnable_3() {}
+fn should_have_runnable_3() {}
 
 /**
     ```rust
     let z = 55;
     ```
 */
-fn should_have_no_runnable_4() {}
+fn should_have_runnable_4() {}
 
 /// ```no_run
 /// let z = 55;
@@ -863,12 +863,12 @@ impl Test for StructWithRunnable {}
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 256..320,
-                            name: "should_have_no_runnable_3",
+                            full_range: 256..317,
+                            name: "should_have_runnable_3",
                         },
                         kind: DocTest {
                             test_id: Path(
-                                "should_have_no_runnable_3",
+                                "should_have_runnable_3",
                             ),
                         },
                         cfg: None,
@@ -879,12 +879,12 @@ impl Test for StructWithRunnable {}
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 322..398,
-                            name: "should_have_no_runnable_4",
+                            full_range: 319..392,
+                            name: "should_have_runnable_4",
                         },
                         kind: DocTest {
                             test_id: Path(
-                                "should_have_no_runnable_4",
+                                "should_have_runnable_4",
                             ),
                         },
                         cfg: None,
@@ -895,7 +895,7 @@ impl Test for StructWithRunnable {}
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 900..965,
+                            full_range: 894..959,
                             name: "StructWithRunnable",
                         },
                         kind: DocTest {
@@ -911,8 +911,8 @@ impl Test for StructWithRunnable {}
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 967..1024,
-                            focus_range: 1003..1021,
+                            full_range: 961..1018,
+                            focus_range: 997..1015,
                             name: "impl",
                             kind: Impl,
                         },
@@ -929,8 +929,8 @@ impl Test for StructWithRunnable {}
                             file_id: FileId(
                                 0,
                             ),
-                            full_range: 1088..1154,
-                            focus_range: 1133..1151,
+                            full_range: 1082..1148,
+                            focus_range: 1127..1145,
                             name: "impl",
                             kind: Impl,
                         },
