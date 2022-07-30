@@ -306,7 +306,7 @@ fn render_resolution_path(
                 item.lookup_by(name.clone())
                     .label(SmolStr::from_iter([&name, "<…>"]))
                     .trigger_call_info()
-                    .insert_snippet(cap, format!("{}<$0>", local_name.escaped()));
+                    .insert_snippet(cap, format!("{}<$0>", local_name));
             }
         }
     }
