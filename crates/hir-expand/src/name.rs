@@ -22,10 +22,7 @@ enum Repr {
 
 impl fmt::Display for Name {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 {
-            Repr::Text(text) => fmt::Display::fmt(&text, f),
-            Repr::TupleField(idx) => fmt::Display::fmt(&idx, f),
-        }
+        self.escaped().fmt(f)
     }
 }
 
