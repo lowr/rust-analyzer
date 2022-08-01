@@ -14,6 +14,10 @@ pub struct Name(Repr);
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct EscapedName<'a>(&'a Name);
 
+// TODO: doc comment
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct RawName<'a>(&'a Name);
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum Repr {
     Text(SmolStr),
@@ -45,6 +49,35 @@ impl<'a> fmt::Display for EscapedName<'a> {
                 }
             }
             Repr::TupleField(idx) => fmt::Display::fmt(&idx, f),
+        }
+    }
+}
+
+impl<'a> fmt::Display for RawName<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.0 .0 {
+            Repr::Text(text) => {
+                let text = text.strip_prefix("r#").unwrap_or(text);
+                fmt::Display::fmt(&text, f)
+            }
+            Repr::TupleField(idx) => fmt::Display::fmt(&idx, f),
+        }
+    }
+}
+
+impl<'a> RawName<'a> {
+    /// Returns the textual representation of this name as a [`SmolStr`]. Prefer using this over
+    /// [`ToString::to_string`] if possible as this conversion is cheaper in the general case.
+    pub fn to_smol_str(&self) -> SmolStr {
+        match &self.0 .0 {
+            Repr::Text(it) => {
+                if let Some(stripped) = it.strip_prefix("r#") {
+                    SmolStr::new(stripped)
+                } else {
+                    it.clone()
+                }
+            }
+            Repr::TupleField(it) => SmolStr::new(&it.to_string()),
         }
     }
 }
@@ -97,9 +130,10 @@ impl Name {
 
     /// Resolve a name from the text of token.
     fn resolve(raw_text: &str) -> Name {
+        // TODO(lowr): comment
         match raw_text.strip_prefix("r#") {
-            Some(text) => Name::new_text(SmolStr::new(text)),
-            None => Name::new_text(raw_text.into()),
+            Some(text) if !is_raw_identifier(text) => Name::new_text(SmolStr::new(text)),
+            _ => Name::new_text(raw_text.into()),
         }
     }
 
@@ -142,8 +176,20 @@ impl Name {
         }
     }
 
+    // TODO(lowr): remove this and fix its caller
     pub fn escaped(&self) -> EscapedName<'_> {
         EscapedName(self)
+    }
+
+    pub fn raw(&self) -> RawName<'_> {
+        RawName(self)
+    }
+
+    pub fn is_escaped(&self) -> bool {
+        match &self.0 {
+            Repr::Text(it) => it.starts_with("r#"),
+            Repr::TupleField(_) => false,
+        }
     }
 }
 
