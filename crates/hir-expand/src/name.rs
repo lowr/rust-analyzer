@@ -10,10 +10,6 @@ use syntax::{ast, SmolStr, SyntaxKind};
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Name(Repr);
 
-/// `EscapedName` will add a prefix "r#" to the wrapped `Name` when it is a raw identifier
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct EscapedName<'a>(&'a Name);
-
 // TODO: doc comment
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct RawName<'a>(&'a Name);
@@ -38,21 +34,6 @@ fn is_raw_identifier(name: &str) -> bool {
     is_keyword && !matches!(name, "self" | "crate" | "super" | "Self")
 }
 
-impl<'a> fmt::Display for EscapedName<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.0 .0 {
-            Repr::Text(text) => {
-                if is_raw_identifier(text) {
-                    write!(f, "r#{}", &text)
-                } else {
-                    fmt::Display::fmt(&text, f)
-                }
-            }
-            Repr::TupleField(idx) => fmt::Display::fmt(&idx, f),
-        }
-    }
-}
-
 impl<'a> fmt::Display for RawName<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 .0 {
@@ -73,31 +54,6 @@ impl<'a> RawName<'a> {
             Repr::Text(it) => {
                 if let Some(stripped) = it.strip_prefix("r#") {
                     SmolStr::new(stripped)
-                } else {
-                    it.clone()
-                }
-            }
-            Repr::TupleField(it) => SmolStr::new(&it.to_string()),
-        }
-    }
-}
-
-impl<'a> EscapedName<'a> {
-    pub fn is_escaped(&self) -> bool {
-        match &self.0 .0 {
-            Repr::Text(it) => is_raw_identifier(&it),
-            Repr::TupleField(_) => false,
-        }
-    }
-
-    /// Returns the textual representation of this name as a [`SmolStr`].
-    /// Prefer using this over [`ToString::to_string`] if possible as this conversion is cheaper in
-    /// the general case.
-    pub fn to_smol_str(&self) -> SmolStr {
-        match &self.0 .0 {
-            Repr::Text(it) => {
-                if is_raw_identifier(&it) {
-                    SmolStr::from_iter(["r#", &it])
                 } else {
                     it.clone()
                 }
@@ -174,11 +130,6 @@ impl Name {
             Repr::Text(it) => it.clone(),
             Repr::TupleField(it) => SmolStr::new(&it.to_string()),
         }
-    }
-
-    // TODO(lowr): remove this and fix its caller
-    pub fn escaped(&self) -> EscapedName<'_> {
-        EscapedName(self)
     }
 
     pub fn raw(&self) -> RawName<'_> {
