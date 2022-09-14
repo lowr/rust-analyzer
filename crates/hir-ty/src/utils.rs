@@ -181,7 +181,7 @@ pub(crate) fn generics(db: &dyn DefDatabase, def: GenericDefId) -> Generics {
             params.iter().any(|(_, x)| matches!(x, TypeOrConstParamData::ConstParamData(_)));
         let parent_has_consts =
             parent_params.iter().any(|(_, x)| matches!(x, TypeOrConstParamData::ConstParamData(_)));
-        return if has_consts || parent_has_consts {
+        if has_consts || parent_has_consts {
             // XXX: treat const generic associated types as not existing to avoid crashes
             // (#11769)
             //
@@ -194,9 +194,7 @@ pub(crate) fn generics(db: &dyn DefDatabase, def: GenericDefId) -> Generics {
             // *before*, not after the trait's generics as we've always done it.
             // Adapting to this requires a larger refactoring
             cov_mark::hit!(ignore_gats);
-            Generics { def, params: Interned::new(Default::default()), parent_generics }
-        } else {
-            Generics { def, params, parent_generics }
+            return Generics { def, params: Interned::new(Default::default()), parent_generics };
         };
     }
     Generics { def, params: db.generic_params(def), parent_generics }
@@ -221,6 +219,7 @@ impl Generics {
         })
     }
 
+    // TODO(lowr): comment on the order of params
     /// Iterator over types and const params of parent, then self.
     pub(crate) fn iter<'a>(
         &'a self,
@@ -228,16 +227,13 @@ impl Generics {
         let to_toc_id = |it: &'a Generics| {
             move |(local_id, p)| (TypeOrConstParamId { parent: it.def, local_id }, p)
         };
-        self.parent_generics()
-            .into_iter()
-            .flat_map(move |it| it.params.iter().map(to_toc_id(it)))
-            .chain(self.params.iter().map(to_toc_id(self)))
+        self.params.iter().map(to_toc_id(self)).chain(self.iter_parent())
     }
 
     /// Iterator over types and const params of parent.
     pub(crate) fn iter_parent<'a>(
         &'a self,
-    ) -> impl Iterator<Item = (TypeOrConstParamId, &'a TypeOrConstParamData)> + 'a {
+    ) -> impl DoubleEndedIterator<Item = (TypeOrConstParamId, &'a TypeOrConstParamData)> + 'a {
         self.parent_generics().into_iter().flat_map(|it| {
             let to_toc_id =
                 move |(local_id, p)| (TypeOrConstParamId { parent: it.def, local_id }, p);
@@ -275,10 +271,12 @@ impl Generics {
         if param.parent == self.def {
             let (idx, (_local_id, data)) =
                 self.params.iter().enumerate().find(|(_, (idx, _))| *idx == param.local_id)?;
-            let parent_len = self.parent_generics().map_or(0, Generics::len);
-            Some((parent_len + idx, data))
+            Some((idx, data))
         } else {
-            self.parent_generics().and_then(|g| g.find_param(param))
+            self.parent_generics()
+                .and_then(|g| g.find_param(param))
+                // TODO(lowr): comment
+                .map(|(idx, data)| (self.params.type_or_consts.len() + idx, data))
         }
     }
 

@@ -34,25 +34,39 @@ pub struct TyBuilder<D> {
     data: D,
     vec: SmallVec<[GenericArg; 2]>,
     param_kinds: SmallVec<[ParamKind; 2]>,
+    parent_subst_len: Option<usize>,
 }
 
 impl<A> TyBuilder<A> {
     fn with_data<B>(self, data: B) -> TyBuilder<B> {
-        TyBuilder { data, param_kinds: self.param_kinds, vec: self.vec }
+        TyBuilder {
+            data,
+            param_kinds: self.param_kinds,
+            vec: self.vec,
+            parent_subst_len: self.parent_subst_len,
+        }
     }
 }
 
 impl<D> TyBuilder<D> {
     fn new(data: D, param_kinds: SmallVec<[ParamKind; 2]>) -> TyBuilder<D> {
-        TyBuilder { data, vec: SmallVec::with_capacity(param_kinds.len()), param_kinds }
+        TyBuilder {
+            data,
+            vec: SmallVec::with_capacity(param_kinds.len()),
+            param_kinds,
+            parent_subst_len: None,
+        }
     }
 
     fn build_internal(self) -> (D, Substitution) {
         assert_eq!(self.vec.len(), self.param_kinds.len());
-        for (a, e) in self.vec.iter().zip(self.param_kinds.iter()) {
+        // TODO(lowr): comment
+        let parent_len = self.parent_subst_len.unwrap_or(0);
+        let (parent, child) = self.vec.split_at(parent_len);
+        for (a, e) in child.iter().chain(parent).zip(self.param_kinds.iter()) {
             self.assert_match_kind(a, e);
         }
-        let subst = Substitution::from_iter(Interner, self.vec);
+        let subst = Substitution::from_iter(Interner, child.iter().chain(parent).cloned());
         (self.data, subst)
     }
 
@@ -77,9 +91,13 @@ impl<D> TyBuilder<D> {
     }
 
     pub fn fill_with_bound_vars(self, debruijn: DebruijnIndex, starting_from: usize) -> Self {
+        let parent_len = self.parent_subst_len.unwrap_or(0);
+        let from = self.vec.len() - parent_len;
+        let to = self.param_kinds.len() - parent_len;
+
         // self.fill is inlined to make borrow checker happy
         let mut this = self;
-        let other = this.param_kinds.iter().skip(this.vec.len());
+        let other = &this.param_kinds[from..to];
         let filler = (starting_from..).zip(other).map(|(idx, kind)| match kind {
             ParamKind::Type => {
                 GenericArgData::Ty(TyKind::BoundVar(BoundVar::new(debruijn, idx)).intern(Interner))
@@ -100,9 +118,13 @@ impl<D> TyBuilder<D> {
     }
 
     pub fn fill_with_unknown(self) -> Self {
+        let parent_len = self.parent_subst_len.unwrap_or(0);
+        let from = self.vec.len() - parent_len;
+        let to = self.param_kinds.len() - parent_len;
+
         // self.fill is inlined to make borrow checker happy
         let mut this = self;
-        let filler = this.param_kinds.iter().skip(this.vec.len()).map(|x| match x {
+        let filler = this.param_kinds[from..to].iter().map(|x| match x {
             ParamKind::Type => GenericArgData::Ty(TyKind::Error.intern(Interner)).intern(Interner),
             ParamKind::Const(ty) => unknown_const_as_generic(ty.clone()),
         });
@@ -121,23 +143,26 @@ impl<D> TyBuilder<D> {
     }
 
     pub fn fill(mut self, filler: impl FnMut(&ParamKind) -> GenericArg) -> Self {
-        self.vec.extend(self.param_kinds.iter().skip(self.vec.len()).map(filler));
+        // [c1, .., ck, ck+1, .., cn, p1, .., pm]
+        //  ^^^^^^^^^^                ~~~~~~~~~~
+        //  pushed (self.vec.len())   pushed (parent_len)
+        //              ^^^^^^^^^^^^
+        //              what we want to push now
+        let parent_len = self.parent_subst_len.unwrap_or(0);
+        let from = self.vec.len() - parent_len;
+        let to = self.param_kinds.len() - parent_len;
+        self.vec.extend(self.param_kinds[from..to].iter().map(filler));
         assert_eq!(self.remaining(), 0);
         self
     }
 
     pub fn use_parent_substs(mut self, parent_substs: &Substitution) -> Self {
         assert!(self.vec.is_empty());
+        assert!(self.parent_subst_len.is_none());
         assert!(parent_substs.len(Interner) <= self.param_kinds.len());
-        self.extend(parent_substs.iter(Interner).cloned());
+        self.vec.extend(parent_substs.iter(Interner).cloned());
+        self.parent_subst_len = Some(parent_substs.len(Interner));
         self
-    }
-
-    fn extend(&mut self, it: impl Iterator<Item = GenericArg> + Clone) {
-        for x in it.clone().zip(self.param_kinds.iter().skip(self.vec.len())) {
-            self.assert_match_kind(&x.0, &x.1);
-        }
-        self.vec.extend(it);
     }
 
     fn assert_match_kind(&self, a: &chalk_ir::GenericArg<Interner>, e: &ParamKind) {
@@ -221,16 +246,26 @@ impl TyBuilder<hir_def::AdtId> {
         db: &dyn HirDatabase,
         mut fallback: impl FnMut() -> Ty,
     ) -> Self {
+        // TODO(lowr): we're building ADT, so we never have parent generics. comment.
+        // NOTE(lowr): addressed
         let defaults = db.generic_defaults(self.data.into());
+        let dummy_ty = TyKind::Error.intern(Interner).cast(Interner);
         for default_ty in defaults.iter().skip(self.vec.len()) {
             if let GenericArgData::Ty(x) = default_ty.skip_binders().data(Interner) {
                 if x.is_unknown() {
                     self.vec.push(fallback().cast(Interner));
                     continue;
                 }
-            };
+            }
             // each default can depend on the previous parameters
-            let subst_so_far = Substitution::from_iter(Interner, self.vec.clone());
+            let subst_so_far = Substitution::from_iter(
+                Interner,
+                self.vec
+                    .iter()
+                    .cloned()
+                    .chain(iter::repeat(dummy_ty.clone()))
+                    .take(self.param_kinds.len()),
+            );
             self.vec.push(default_ty.clone().substitute(Interner, &subst_so_far).cast(Interner));
         }
         self
