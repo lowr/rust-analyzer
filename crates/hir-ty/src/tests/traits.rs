@@ -1121,16 +1121,16 @@ fn test() {
             306..314 'Foo::bar': fn bar<{unknown}, {unknown}>(S) -> {unknown}
             306..317 'Foo::bar(S)': {unknown}
             315..316 'S': S
-            323..338 '<F as Foo>::bar': fn bar<F, {unknown}>(S) -> {unknown}
+            323..338 '<F as Foo>::bar': fn bar<{unknown}, F>(S) -> {unknown}
             323..341 '<F as ...bar(S)': {unknown}
             339..340 'S': S
-            347..353 'F::bar': fn bar<F, {unknown}>(S) -> {unknown}
+            347..353 'F::bar': fn bar<{unknown}, F>(S) -> {unknown}
             347..356 'F::bar(S)': {unknown}
             354..355 'S': S
-            362..377 'Foo::bar::<u32>': fn bar<{unknown}, u32>(S) -> u32
+            362..377 'Foo::bar::<u32>': fn bar<u32, {unknown}>(S) -> u32
             362..380 'Foo::b...32>(S)': u32
             378..379 'S': S
-            386..408 '<F as ...:<u32>': fn bar<F, u32>(S) -> u32
+            386..408 '<F as ...:<u32>': fn bar<u32, F>(S) -> u32
             386..411 '<F as ...32>(S)': u32
             409..410 'S': S
             418..421 'foo': fn foo<{unknown}>(S) -> {unknown}

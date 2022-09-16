@@ -305,8 +305,9 @@ impl<'a> TyLoweringContext<'a> {
                         let idx = self.impl_trait_counter.get();
                         // FIXME we're probably doing something wrong here
                         self.impl_trait_counter.set(idx + count_impl_traits(type_ref) as u16);
+                        // TODO(lowr): comment
                         let (
-                            parent_params,
+                            _parent_params,
                             self_params,
                             list_params,
                             const_params,
@@ -319,7 +320,7 @@ impl<'a> TyLoweringContext<'a> {
                         };
                         TyKind::BoundVar(BoundVar::new(
                             self.in_binders,
-                            idx as usize + parent_params + self_params + list_params + const_params,
+                            idx as usize + self_params + list_params + const_params,
                         ))
                         .intern(Interner)
                     }
@@ -447,8 +448,12 @@ impl<'a> TyLoweringContext<'a> {
                             .db
                             .trait_data(trait_ref.hir_trait_id())
                             .associated_type_by_name(segment.name);
+
+                        let _ =
+                            self.resolver.generic_def().map(|def| generics(self.db.upcast(), def));
                         match found {
                             Some(associated_ty) => {
+                                // TODO(lowr): related to GATs
                                 // FIXME handle type parameters on the segment
                                 TyKind::Alias(AliasTy::Projection(ProjectionTy {
                                     associated_ty_id: to_assoc_type_id(associated_ty),
@@ -499,14 +504,29 @@ impl<'a> TyLoweringContext<'a> {
                 .intern(Interner)
             }
             TypeNs::SelfType(impl_id) => {
-                let generics = generics(self.db.upcast(), impl_id.into());
+                // NOTE(lowr): this is subst for IMPL
+                // let generics = generics(self.db.upcast(), impl_id.into());
+                // TODO(lowr): comment
+                // NOTE(lowr): I think we can unconditionally unwrap this?
+                let def = self.resolver.generic_def().unwrap_or(impl_id.into());
+                let generics = generics(self.db.upcast(), def);
                 let substs = match self.type_param_mode {
                     ParamLoweringMode::Placeholder => generics.placeholder_subst(self.db),
                     ParamLoweringMode::Variable => {
                         generics.bound_vars_subst(self.db, self.in_binders)
                     }
                 };
-                self.db.impl_self_ty(impl_id).substitute(Interner, &substs)
+                // NOTE(lowr): but we need to substitute the bound vars seen from FN
+                // self.db.impl_self_ty(impl_id).substitute(Interner, &substs)
+
+                // NOTE(lowr): this is error prone. we should introduce a fn or smth.
+                let self_ty = self.db.impl_self_ty(impl_id);
+                let substs = Substitution::from_iter(
+                    Interner,
+                    substs.as_slice(Interner)[substs.len(Interner) - self_ty.len(Interner)..]
+                        .iter(),
+                );
+                self_ty.substitute(Interner, &substs)
             }
             TypeNs::AdtSelfType(adt) => {
                 let generics = generics(self.db.upcast(), adt.into());
@@ -592,6 +612,7 @@ impl<'a> TyLoweringContext<'a> {
                     // We need to shift in the bound vars, since
                     // associated_type_shorthand_candidates does not do that
                     let substs = substs.shifted_in_from(Interner, self.in_binders);
+                    // TODO(lowr): related to GATs
                     // FIXME handle type parameters on the segment
                     Some(
                         TyKind::Alias(AliasTy::Projection(ProjectionTy {
@@ -678,25 +699,16 @@ impl<'a> TyLoweringContext<'a> {
         let total_len =
             parent_params + self_params + type_params + const_params + impl_trait_params;
 
-        let ty_error = GenericArgData::Ty(TyKind::Error.intern(Interner)).intern(Interner);
+        let ty_error = TyKind::Error.intern(Interner).cast(Interner);
 
         let mut def_generic_iter = def_generics.iter_id();
 
-        for _ in 0..parent_params {
-            if let Some(eid) = def_generic_iter.next() {
-                match eid {
-                    Either::Left(_) => substs.push(ty_error.clone()),
-                    Either::Right(x) => {
-                        substs.push(unknown_const_as_generic(self.db.const_param_ty(x)))
-                    }
-                }
-            }
-        }
+        // TODO(lowr): comment on the subst ordering when there are parent params.
 
         let fill_self_params = || {
             for x in explicit_self_ty
                 .into_iter()
-                .map(|x| GenericArgData::Ty(x).intern(Interner))
+                .map(|x| x.cast(Interner))
                 .chain(iter::repeat(ty_error.clone()))
                 .take(self_params)
             {
@@ -757,34 +769,50 @@ impl<'a> TyLoweringContext<'a> {
             fill_self_params();
         }
 
+        let remaining_params: Vec<_> = def_generic_iter
+            .map(|eid| match eid {
+                Either::Left(_) => ty_error.clone(),
+                Either::Right(x) => unknown_const_as_generic(self.db.const_param_ty(x)),
+            })
+            .collect();
+        assert_eq!(remaining_params.len() + substs.len(), total_len);
+
         // handle defaults. In expression or pattern path segments without
         // explicitly specified type arguments, missing type arguments are inferred
         // (i.e. defaults aren't used).
         if !infer_args || had_explicit_args {
             if let Some(def_generic) = def_generic {
+                // NOTE(lowr): addressed
                 let defaults = self.db.generic_defaults(def_generic);
                 assert_eq!(total_len, defaults.len());
 
-                for default_ty in defaults.iter().skip(substs.len()) {
+                for (idx, default_ty) in defaults.iter().skip(substs.len()).enumerate() {
                     // each default can depend on the previous parameters
-                    let substs_so_far = Substitution::from_iter(Interner, substs.clone());
-                    if let Some(_id) = def_generic_iter.next() {
-                        substs.push(default_ty.clone().substitute(Interner, &substs_so_far));
-                    }
+                    let substs_so_far = Substitution::from_iter(                         
+                        Interner,                                                        
+                        substs.iter().cloned().chain(remaining_params[idx..].iter().cloned()),
+                    );                                                                   
+                    substs.push(default_ty.clone().substitute(Interner, &substs_so_far));
                 }
             }
+        } else {
+            substs.extend(remaining_params);
         }
 
         // add placeholders for args that were not provided
         // FIXME: emit diagnostics in contexts where this is not allowed
-        for eid in def_generic_iter {
-            match eid {
-                Either::Left(_) => substs.push(ty_error.clone()),
-                Either::Right(x) => {
-                    substs.push(unknown_const_as_generic(self.db.const_param_ty(x)))
-                }
-            }
-        }
+        // TODO(lowr): comment; this also handles parent params
+        // for eid in def_generic_iter {
+        //     match eid {
+        //         Either::Left(_) => substs.push(ty_error.clone()),
+        //         Either::Right(x) => {
+        //             substs.push(unknown_const_as_generic(self.db.const_param_ty(x)))
+        //         }
+        //     }
+        // }
+        // substs.extend(remaining_params);
+
+        // TODO(lowr): obsolete comment
         // If this assert fails, it means you pushed into subst but didn't call .next() of def_generic_iter
         assert_eq!(substs.len(), total_len);
 
@@ -894,6 +922,7 @@ impl<'a> TyLoweringContext<'a> {
                         true
                     })
                     .map(WhereClause::Implemented)
+                    // NOTE(lowr): we don't handle for-lifetime yet.
                     .map(crate::wrap_empty_binders)
             }
             TypeBound::Path(path, TraitBoundModifier::Maybe) => {
@@ -1160,10 +1189,23 @@ fn named_associated_type_shorthand_candidates<R>(
             }
             // Handle `Self::Type` referring to own associated type in trait definitions
             if let GenericDefId::TraitId(trait_id) = param_id.parent() {
-                let generics = generics(db.upcast(), trait_id.into());
-                if generics.params.type_or_consts[param_id.local_id()].is_trait_self() {
+                let trait_generics = generics(db.upcast(), trait_id.into());
+                if trait_generics.params.type_or_consts[param_id.local_id()].is_trait_self() {
+                    // TODO(lowr): comment
+                    let a = generics(db.upcast(), def);
+                    let our_len = a.len();
+                    let (parent_len, ..) = a.provenance_split();
+                    // TODO(lowr): explain this
+                    // When `parent_len > 0`, it means `def` is an item associated with trait. So
+                    // substitution looks like:
+                    // [c1, .., ck, p1, .., pk]
+                    //              ^^^^^^^^^^ these are what we want now
+                    //
+                    // Otherwise, `def` is for the trait itself, so substitution for it *is* what
+                    // we want now.
+                    let from = if parent_len > 0 { our_len - parent_len } else { 0 };
                     let trait_ref = TyBuilder::trait_ref(db, trait_id)
-                        .fill_with_bound_vars(DebruijnIndex::INNERMOST, 0)
+                        .fill_with_bound_vars(DebruijnIndex::INNERMOST, from)
                         .build();
                     return search(trait_ref);
                 }
@@ -1405,6 +1447,8 @@ pub(crate) fn generic_defaults_query(
     let ctx =
         TyLoweringContext::new(db, &resolver).with_type_param_mode(ParamLoweringMode::Variable);
     let generic_params = generics(db.upcast(), def);
+    let (parent_len, ..) = generic_params.provenance_split();
+    let params_len = generic_params.len();
 
     let defaults = generic_params
         .iter()
@@ -1427,9 +1471,8 @@ pub(crate) fn generic_defaults_query(
             // type variable default referring to parameter coming
             // after it. This is forbidden (FIXME: report
             // diagnostic)
-            ty = fallback_bound_vars(ty, idx);
-            let val = GenericArgData::Ty(ty).intern(Interner);
-            crate::make_binders_with_count(db, idx, &generic_params, val)
+            ty = fallback_bound_vars(ty, params_len - parent_len, idx);
+            crate::make_binders(db, &generic_params, ty.cast(Interner))
         })
         .collect();
 
@@ -1446,15 +1489,14 @@ pub(crate) fn generic_defaults_recover(
     // we still need one default per parameter
     let defaults = generic_params
         .iter_id()
-        .enumerate()
-        .map(|(count, id)| {
+        .map(|id| {
             let val = match id {
                 itertools::Either::Left(_) => {
                     GenericArgData::Ty(TyKind::Error.intern(Interner)).intern(Interner)
                 }
                 itertools::Either::Right(id) => unknown_const_as_generic(db.const_param_ty(id)),
             };
-            crate::make_binders_with_count(db, count, &generic_params, val)
+            crate::make_binders(db, &generic_params, val)
         })
         .collect();
 
@@ -1817,22 +1859,26 @@ pub(crate) fn const_or_path_to_chalk(
 }
 
 /// This replaces any 'free' Bound vars in `s` (i.e. those with indices past
-/// num_vars_to_keep) by `TyKind::Unknown`.
+/// num_vars_to_keep) by `TyKind::Error`.
 fn fallback_bound_vars<T: TypeFoldable<Interner> + HasInterner<Interner = Interner>>(
     s: T,
-    num_vars_to_keep: usize,
+    // num_vars_to_keep: usize,
+    parent_start: usize,
+    param_index: usize,
 ) -> T {
+    let is_allowed = |index| (parent_start..param_index).contains(&index) || index < param_index;
     crate::fold_free_vars(
         s,
         |bound, binders| {
-            if bound.index >= num_vars_to_keep && bound.debruijn == DebruijnIndex::INNERMOST {
+            // if bound.index >= num_vars_to_keep && bound.debruijn == DebruijnIndex::INNERMOST {
+            if !is_allowed(bound.index) && bound.debruijn == DebruijnIndex::INNERMOST {
                 TyKind::Error.intern(Interner)
             } else {
                 bound.shifted_in_from(binders).to_ty(Interner)
             }
         },
         |ty, bound, binders| {
-            if bound.index >= num_vars_to_keep && bound.debruijn == DebruijnIndex::INNERMOST {
+            if !is_allowed(bound.index) && bound.debruijn == DebruijnIndex::INNERMOST {
                 unknown_const(ty.clone())
             } else {
                 bound.shifted_in_from(binders).to_const(Interner, ty)

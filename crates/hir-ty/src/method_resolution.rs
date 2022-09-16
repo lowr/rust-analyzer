@@ -1201,9 +1201,19 @@ fn is_valid_fn_candidate(
             .build();
 
         let expect_self_ty = match container {
-            ItemContainerId::TraitId(_) => fn_subst.at(Interner, 0).assert_ty_ref(Interner).clone(),
+            ItemContainerId::TraitId(_) => {
+                impl_subst.at(Interner, 0).assert_ty_ref(Interner).clone()
+            }
             ItemContainerId::ImplId(impl_id) => {
-                fn_subst.apply(db.impl_self_ty(impl_id).skip_binders().clone(), Interner)
+                // fn_subst.apply(db.impl_self_ty(impl_id).skip_binders().clone(), Interner)
+                let self_ty = db.impl_self_ty(impl_id);
+                // TODO(lowr)
+                let subst = crate::Substitution::from_iter(
+                    Interner,
+                    fn_subst.as_slice(Interner)[fn_subst.len(Interner) - self_ty.len(Interner)..]
+                        .iter(),
+                );
+                self_ty.substitute(Interner, &subst)
             }
             // We should only get called for associated items (impl/trait)
             ItemContainerId::ModuleId(_) | ItemContainerId::ExternBlockId(_) => {

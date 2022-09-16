@@ -99,7 +99,8 @@ impl<'a> InferenceContext<'a> {
         let parent_substs = self_subst.unwrap_or_else(|| Substitution::empty(Interner));
         let ctx = crate::lower::TyLoweringContext::new(self.db, &self.resolver);
         let substs = ctx.substs_from_path(path, typable, true);
-        let mut it = substs.as_slice(Interner)[parent_substs.len(Interner)..].iter().cloned();
+        let substs = substs.as_slice(Interner);
+        let mut it = substs.iter().take(substs.len() - parent_substs.len(Interner)).cloned();
         let ty = TyBuilder::value_ty(self.db, typable)
             .use_parent_substs(&parent_substs)
             .fill(|x| {

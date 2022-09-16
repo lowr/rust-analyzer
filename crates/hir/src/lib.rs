@@ -61,7 +61,6 @@ use hir_ty::{
     diagnostics::BodyValidationDiagnostic,
     method_resolution::{self, TyFingerprint},
     primitive::UintTy,
-    subst_prefix,
     traits::FnTrait,
     AliasTy, CallableDefId, CallableSig, Canonical, CanonicalVarKinds, Cast, ClosureId,
     GenericArgData, Interner, ParamKind, QuantifiedWhereClause, Scalar, Substitution,
@@ -1014,6 +1013,7 @@ impl_from!(Struct, Union, Enum for Adt);
 
 impl Adt {
     pub fn has_non_default_type_params(self, db: &dyn HirDatabase) -> bool {
+        // NOTE(lowr): no parent
         let subst = db.generic_defaults(self.into());
         subst.iter().any(|ty| match ty.skip_binders().data(Interner) {
             GenericArgData::Ty(x) => x.is_unknown(),
@@ -1767,6 +1767,7 @@ pub struct TypeAlias {
 
 impl TypeAlias {
     pub fn has_non_default_type_params(self, db: &dyn HirDatabase) -> bool {
+        // NOTE(lowr): ordering doesn't matter
         let subst = db.generic_defaults(self.id.into());
         subst.iter().any(|ty| match ty.skip_binders().data(Interner) {
             GenericArgData::Ty(x) => x.is_unknown(),
@@ -2485,7 +2486,7 @@ impl TypeParam {
         let resolver = self.id.parent().resolver(db.upcast());
         let ty = params.get(local_idx)?.clone();
         let subst = TyBuilder::placeholder_subst(db, self.id.parent());
-        let ty = ty.substitute(Interner, &subst_prefix(&subst, local_idx));
+        let ty = ty.substitute(Interner, &subst);
         match ty.data(Interner) {
             GenericArgData::Ty(x) => Some(Type::new_with_resolver_inner(db, &resolver, x.clone())),
             _ => None,

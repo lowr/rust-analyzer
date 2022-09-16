@@ -26,7 +26,7 @@ use crate::{
     db::HirDatabase,
     from_assoc_type_id, from_foreign_def_id, from_placeholder_idx, lt_from_placeholder_idx,
     mapping::from_chalk,
-    primitive, subst_prefix, to_assoc_type_id,
+    primitive, to_assoc_type_id,
     utils::{self, generics},
     AdtId, AliasEq, AliasTy, Binders, CallableDefId, CallableSig, Const, ConstValue, DomainGoal,
     GenericArg, ImplTraitId, Interner, Lifetime, LifetimeData, LifetimeOutlives, Mutability,
@@ -504,8 +504,15 @@ impl HirDisplay for Ty {
                     let total_len = parent_params + self_param + type_params + const_params;
                     // We print all params except implicit impl Trait params. Still a bit weird; should we leave out parent and self?
                     if total_len > 0 {
+                        // TODO(lowr): comment?
+                        let parameters = parameters.as_slice(Interner);
+                        let our_len = self_param + type_params + const_params;
+                        let our_params = parameters.get(..our_len);
+                        let parent_params = parameters.get(parameters.len() - parent_params..);
+                        let it = our_params.into_iter().chain(parent_params).flatten();
                         write!(f, "<")?;
-                        f.write_joined(&parameters.as_slice(Interner)[..total_len], ", ")?;
+                        // f.write_joined(&parameters.as_slice(Interner)[..total_len], ", ")?;
+                        f.write_joined(it, ", ")?;
                         write!(f, ">")?;
                     }
                 }
@@ -545,6 +552,8 @@ impl HirDisplay for Ty {
                 }
 
                 if parameters.len(Interner) > 0 {
+                    // TODO(lowr): when the target is source code, I might be messing everything
+                    // up.
                     let parameters_to_write = if f.display_target.is_source_code()
                         || f.omit_verbose_types()
                     {
@@ -577,9 +586,8 @@ impl HirDisplay for Ty {
                                         Some(x) => x,
                                         None => return true,
                                     };
-                                    let actual_default = default_parameter
-                                        .clone()
-                                        .substitute(Interner, &subst_prefix(parameters, i));
+                                    let actual_default =
+                                        default_parameter.clone().substitute(Interner, &parameters);
                                     parameter != &actual_default
                                 }
                                 let mut default_from = 0;

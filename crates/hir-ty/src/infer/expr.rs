@@ -1245,19 +1245,21 @@ impl<'a> InferenceContext<'a> {
         assert_eq!(self_params, 0); // method shouldn't have another Self param
         let total_len = parent_params + type_params + const_params + impl_trait_params;
         let mut substs = Vec::with_capacity(total_len);
+        // TODO(lowr): comment
         // Parent arguments are unknown
-        for (id, param) in def_generics.iter_parent() {
-            match param {
-                TypeOrConstParamData::TypeParamData(_) => {
-                    substs.push(GenericArgData::Ty(self.table.new_type_var()).intern(Interner));
-                }
-                TypeOrConstParamData::ConstParamData(_) => {
-                    let ty = self.db.const_param_ty(ConstParamId::from_unchecked(id));
-                    substs
-                        .push(GenericArgData::Const(self.table.new_const_var(ty)).intern(Interner));
-                }
-            }
-        }
+        // for (id, param) in def_generics.iter_parent() {
+        //     match param {
+        //         TypeOrConstParamData::TypeParamData(_) => {
+        //             substs.push(GenericArgData::Ty(self.table.new_type_var()).intern(Interner));
+        //         }
+        //         TypeOrConstParamData::ConstParamData(_) => {
+        //             let ty = self.db.const_param_ty(ConstParamId::from_unchecked(id));
+        //             substs
+        //                 .push(GenericArgData::Const(self.table.new_const_var(ty)).intern(Interner));
+        //         }
+        //     }
+        // }
+
         // handle provided arguments
         if let Some(generic_args) = generic_args {
             // if args are provided, it should be all of them, but we can't rely on that
@@ -1327,9 +1329,11 @@ impl<'a> InferenceContext<'a> {
                 CallableDefId::FunctionId(f) => {
                     if let ItemContainerId::TraitId(trait_) = f.lookup(self.db.upcast()).container {
                         // construct a TraitRef
-                        let substs = crate::subst_prefix(
-                            &*parameters,
-                            generics(self.db.upcast(), trait_.into()).len(),
+                        let params_len = parameters.len(Interner);
+                        let trait_params_len = generics(self.db.upcast(), trait_.into()).len();
+                        let substs = Substitution::from_iter(
+                            Interner,
+                            &parameters.as_slice(Interner)[params_len - trait_params_len..],
                         );
                         self.push_obligation(
                             TraitRef { trait_id: to_chalk_trait_id(trait_), substitution: substs }

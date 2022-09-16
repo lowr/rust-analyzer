@@ -2551,13 +2551,13 @@ impl B for Astruct {}
             602..634 '{     ...     }': Vec<T, A>
             648..761 '{     ...t]); }': ()
             658..661 'vec': Vec<i32, Global>
-            664..679 '<[_]>::into_vec': fn into_vec<i32, Global>(Box<[i32], Global>) -> Vec<i32, Global>
+            664..679 '<[_]>::into_vec': fn into_vec<Global, i32>(Box<[i32], Global>) -> Vec<i32, Global>
             664..691 '<[_]>:...1i32])': Vec<i32, Global>
             680..690 'box [1i32]': Box<[i32; 1], Global>
             684..690 '[1i32]': [i32; 1]
             685..689 '1i32': i32
             701..702 'v': Vec<Box<dyn B, Global>, Global>
-            722..739 '<[_]> ...to_vec': fn into_vec<Box<dyn B, Global>, Global>(Box<[Box<dyn B, Global>], Global>) -> Vec<Box<dyn B, Global>, Global>
+            722..739 '<[_]> ...to_vec': fn into_vec<Global, Box<dyn B, Global>>(Box<[Box<dyn B, Global>], Global>) -> Vec<Box<dyn B, Global>, Global>
             722..758 '<[_]> ...ruct])': Vec<Box<dyn B, Global>, Global>
             740..757 'box [b...truct]': Box<[Box<dyn B, Global>; 1], Global>
             744..757 '[box Astruct]': [Box<dyn B, Global>; 1]
