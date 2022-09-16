@@ -1268,7 +1268,7 @@ impl<'a> InferenceContext<'a> {
                 .iter()
                 .filter(|arg| !matches!(arg, GenericArg::Lifetime(_)))
                 .take(type_params + const_params)
-                .zip(def_generics.iter_id().skip(parent_params))
+                .zip(def_generics.iter_id())
             {
                 if let Some(g) = generic_arg_to_chalk(
                     self.db,

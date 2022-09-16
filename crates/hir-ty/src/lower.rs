@@ -1461,7 +1461,7 @@ pub(crate) fn generic_defaults_query(
                     let val = unknown_const_as_generic(
                         db.const_param_ty(ConstParamId::from_unchecked(id)),
                     );
-                    return crate::make_binders_with_count(db, idx, &generic_params, val);
+                    return make_binders(db, &generic_params, val);
                 }
             };
             let mut ty =

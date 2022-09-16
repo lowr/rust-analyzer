@@ -1532,25 +1532,22 @@ fn gat_crash_3() {
     // in debug mode, we catch the unwind and expect that it panicked. See the
     // [`crate::utils::generics`] function for more information.
     cov_mark::check!(ignore_gats);
-    std::panic::catch_unwind(|| {
-        check_no_mismatches(
-            r#"
+    check_no_mismatches(
+        r#"
 trait Collection {
-    type Item;
-    type Member<T>: Collection<Item = T>;
-    fn add(&mut self, value: Self::Item) -> Result<(), Self::Error>;
+type Item;
+type Member<T>: Collection<Item = T>;
+fn add(&mut self, value: Self::Item) -> Result<(), Self::Error>;
 }
 struct ConstGen<T, const N: usize> {
-    data: [T; N],
+data: [T; N],
 }
 impl<T, const N: usize> Collection for ConstGen<T, N> {
-    type Item = T;
-    type Member<U> = ConstGen<U, N>;
+type Item = T;
+type Member<U> = ConstGen<U, N>;
 }
-        "#,
-        );
-    })
-    .expect_err("must panic");
+    "#,
+    );
 }
 
 #[test]

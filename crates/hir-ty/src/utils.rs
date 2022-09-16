@@ -174,6 +174,7 @@ pub(super) fn associated_type_by_name_including_super_traits(
 
 pub(crate) fn generics(db: &dyn DefDatabase, def: GenericDefId) -> Generics {
     let parent_generics = parent_generic_def(db, def).map(|def| Box::new(generics(db, def)));
+    // TODO(lowr): remove this if it proves to be solved
     if parent_generics.is_some() && matches!(def, GenericDefId::TypeAliasId(_)) {
         let params = db.generic_params(def);
         let parent_params = &parent_generics.as_ref().unwrap().params;
@@ -194,7 +195,6 @@ pub(crate) fn generics(db: &dyn DefDatabase, def: GenericDefId) -> Generics {
             // *before*, not after the trait's generics as we've always done it.
             // Adapting to this requires a larger refactoring
             cov_mark::hit!(ignore_gats);
-            return Generics { def, params: Interned::new(Default::default()), parent_generics };
         };
     }
     Generics { def, params: db.generic_params(def), parent_generics }
