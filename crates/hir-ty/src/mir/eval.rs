@@ -488,11 +488,7 @@ impl Evaluator<'_> {
                                     };
                                     let result = if is_intrinsic {
                                         self.exec_intrinsic(
-                                            function_data
-                                                .name
-                                                .as_text()
-                                                .unwrap_or_default()
-                                                .as_str(),
+                                            function_data.name.as_str().unwrap_or_default(),
                                             arg_bytes,
                                             generic_args,
                                             &locals,

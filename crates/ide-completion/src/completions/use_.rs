@@ -53,8 +53,8 @@ pub(crate) fn complete_use_path(
                     };
                     for (name, def) in module_scope {
                         let is_name_already_imported = name
-                            .as_text()
-                            .map_or(false, |text| already_imported_names.contains(text.as_str()));
+                            .as_str()
+                            .map_or(false, |text| already_imported_names.contains(text));
 
                         let add_resolution = match def {
                             ScopeDef::Unknown if unknown_is_current(&name) => {

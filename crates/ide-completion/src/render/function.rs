@@ -181,8 +181,8 @@ pub(super) fn add_call_parens<'b>(
                                 None => "_".to_string(),
                                 Some(adt) => adt
                                     .name(ctx.db)
-                                    .as_text()
-                                    .map(|s| to_lower_snake_case(s.as_str()))
+                                    .as_str()
+                                    .map(to_lower_snake_case)
                                     .unwrap_or_else(|| "_".to_string()),
                             };
                             f(&format_args!("${{{}:{name}}}", index + offset))
@@ -216,7 +216,7 @@ pub(super) fn add_call_parens<'b>(
 fn ref_of_param(ctx: &CompletionContext<'_>, arg: &str, ty: &hir::Type) -> &'static str {
     if let Some(derefed_ty) = ty.remove_ref() {
         for (name, local) in ctx.locals.iter() {
-            if name.as_text().as_deref() == Some(arg) {
+            if name.as_str() == Some(arg) {
                 return if local.ty(ctx.db) == derefed_ty {
                     if ty.is_mutable_reference() {
                         "&mut "
